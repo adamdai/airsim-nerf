@@ -64,7 +64,8 @@ def airsim_to_nerfstudio(airsim_pose):
 
     Returns
     -------
-    nerfstudio_pose : tuple (R, t)
+    np.array (4 x 4)
+        Nerfstudio transformation matrix
 
     """
     airsim_R, airsim_t = airsim_pose
@@ -73,4 +74,7 @@ def airsim_to_nerfstudio(airsim_pose):
     ns_R = np.array([vy, -vz, -vx]).T
 
     ns_t = NED_2_ENU @ airsim_t
-    return (ns_R, ns_t)
+    T = np.eye(4)
+    T[:3, :3] = ns_R
+    T[:3, 3] = ns_t
+    return T

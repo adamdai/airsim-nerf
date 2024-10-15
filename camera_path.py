@@ -32,10 +32,7 @@ if __name__ == '__main__':
         q = R_to_quat(airsim_R)
 
         poses.append((q, airsim_t.copy()))
-        ns_pose = airsim_to_nerfstudio((airsim_R, airsim_t))
-        T = np.eye(4)
-        T[:3, :3] = ns_pose[0]
-        T[:3, 3] = ns_pose[1]
+        T = airsim_to_nerfstudio((airsim_R, airsim_t))
         transforms.append(T)
 
 

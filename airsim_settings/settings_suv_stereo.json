@@ -1,0 +1,60 @@
+{
+  "SettingsVersion": 1.2,
+  "SimMode": "Car",
+  "Vehicles": {
+    "Rover": {
+        "VehicleType": "PhysXCar",
+        "Cameras": {
+            "FrontCamera": {
+              "CaptureSettings": [
+                  {
+                  "ImageType": 0,
+                  "Width": 1280,
+                  "Height": 720,
+                  "FOV_Degrees": 90
+                  }
+                ],
+              "X": 1.0, "Y": 0, "Z": -2,
+              "Pitch": -20, "Roll": 0, "Yaw": 0
+            },
+            "LeftCamera": {
+              "CaptureSettings": [
+                  {
+                  "ImageType": 0,
+                  "Width": 1280,
+                  "Height": 720,
+                  "FOV_Degrees": 90
+                  }
+                ],
+              "X": 1.0, "Y": -0.5, "Z": -2,
+              "Pitch": -20, "Roll": 0, "Yaw": 0
+            },
+            "RightCamera": {
+              "CaptureSettings": [
+                  {
+                  "ImageType": 0,
+                  "Width": 1280,
+                  "Height": 720,
+                  "FOV_Degrees": 90
+                  }
+                ],
+              "X": 1.0, "Y": 0.5, "Z": -2,
+              "Pitch": -20, "Roll": 0, "Yaw": 0
+            },
+            "Depth": {
+              "CaptureSettings": [
+                  {
+                  "ImageType": 1,
+                  "Width": 720,
+                  "Height": 360
+                  }
+                ],
+              "X": 0.5, "Y": 0, "Z": -2,
+              "Pitch": 0, "Roll": 0, "Yaw": 0
+            }
+        },
+        "X": 0, "Y": 0, "Z": 0,
+        "Pitch": 0, "Roll": 0, "Yaw": 0
+    }
+}
+}
