@@ -5,14 +5,16 @@
 import airsim
 import json
 import numpy as np
+import cv2 as cv
 import os
 import time
 import shutil
 
 from util.coordinates import quat_to_R, NED_2_ENU, XY_ROT_180
 
-FOLDER_NAME = "unreal_moon"
+FOLDER_NAME = "landscape_mtns_spiral_record"
 DT = 0.1  # seconds
+CV_MODE = True
 
 if __name__ == "__main__":
 
@@ -36,9 +38,14 @@ if __name__ == "__main__":
     while True:
         try: 
             # Capture image
-            responses = client.simGetImages([airsim.ImageRequest("FrontCamera", airsim.ImageType.Scene)])
             img_path = f"images/img_{img_count}.png"
-            airsim.write_file(os.path.join(output_folder, img_path), responses[0].image_data_uint8)
+            if CV_MODE:
+                image = client.simGetImage(0, airsim.ImageType.Scene)
+                image = cv.imdecode(np.frombuffer(image, np.uint8), -1)
+                cv.imwrite(f'{output_folder}/{img_path}', image)
+            else:
+                responses = client.simGetImages([airsim.ImageRequest("FrontCamera", airsim.ImageType.Scene)])
+                airsim.write_file(os.path.join(output_folder, img_path), responses[0].image_data_uint8)
 
             # Get camera pose
             cam_info = client.simGetCameraInfo("FrontCamera")

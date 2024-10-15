@@ -7,7 +7,7 @@ import cv2 as cv
 import json
 import shutil
 
-from util.coordinates import R_to_quat, NED_2_ENU, XY_ROT_180
+from util.coordinates import R_to_quat, NED_2_ENU
 from util.plotting import pose_traces
 
 
@@ -37,7 +37,7 @@ def generate_spiral(center, num_rings, radii, heights, num_points):
             vy = np.cross(vz, vx)                                     # "Right" vector
             airsim_R = np.vstack((vx, vy, vz)).T
             q = R_to_quat(airsim_R)
-            airsim_poses.append((position, q))
+            airsim_poses.append((q, position))
 
             # Nerfstudio coordinates
             R = NED_2_ENU @ airsim_R
@@ -60,10 +60,15 @@ if __name__ == '__main__':
     #%% Spiral parameters
 
     # For LandscapeMountains
-    center = np.array([99., -449., -57.])
+    # center = np.array([99., -449., -57.])
+    # num_rings = 3
+    # radii = [250, 300, 400]
+    # heights = [150, 180, 200]
+    # num_points = [20, 20, 20]
+    center = np.array([0., 0., 0.])
     num_rings = 3
-    radii = [250, 300, 400]
-    heights = [150, 180, 200]
+    radii = [10, 15, 20]
+    heights = [3, 4, 5]
     num_points = [20, 20, 20]
 
     # For Moon
@@ -101,7 +106,8 @@ if __name__ == '__main__':
     client = airsim.VehicleClient()
     client.confirmConnection()
 
-    for i, (position, q) in enumerate(poses):
+    for i, (q, position) in enumerate(poses):
+        print(f"Capturing image {i}...")
         vehicle_pose = Pose(Vector3r(position[0], position[1], position[2]), q)
         client.simSetVehiclePose(vehicle_pose, True)
         
@@ -118,12 +124,10 @@ if __name__ == '__main__':
             "colmap_im_id": i,
         }
         frames.append(frame)
-        
-        #airsim.time.sleep(0.01)
     
     # Generate transforms.json
     # TODO: pull camera params from settings.json
-    W, H = 1920, 1080
+    W, H = 720, 360
     FOV = 90
     fl = W / (2 * np.tan(np.radians(FOV) / 2))
     out = {

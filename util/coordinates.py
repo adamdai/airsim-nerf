@@ -50,22 +50,27 @@ def R_to_quat(R):
     return Quaternionr(q[0], q[1], q[2], q[3])
 
 
-def airsim_to_nerfstudio(airsim_R):
+def euler_to_R(euler, seq='XYZ'):
+    r = Rotation.from_euler(seq, euler, degrees=True)
+    return r.as_matrix()
+
+
+def airsim_to_nerfstudio(airsim_pose):
     """Convert rotation matrix from AirSim to NerfStudio coordinates
 
     Parameters
     ----------
-    R : np.array (3 x 3)
-        Rotation matrix in AirSim coordinates
+    airsim_pose : tuple (R, t)
 
     Returns
     -------
-    np.array (3 x 3)
-        Rotation matrix in NerfStudio coordinates
+    nerfstudio_pose : tuple (R, t)
 
     """
-    NED_2_NERFSTUDIO = np.array([[0, 0, -1],
-                                 [1, 0, 0],
-                                 [0, -1, 0]])  # or inverse?
-    nerfstudio_R = np.eye(3)  # TODO
-    return nerfstudio_R
+    airsim_R, airsim_t = airsim_pose
+    ns_R = NED_2_ENU @ airsim_R
+    vx, vy, vz = ns_R[:, 0], ns_R[:, 1], ns_R[:, 2]
+    ns_R = np.array([vy, -vz, -vx]).T
+
+    ns_t = NED_2_ENU @ airsim_t
+    return (ns_R, ns_t)

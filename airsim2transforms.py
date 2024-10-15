@@ -165,55 +165,36 @@ if __name__ == '__main__':
         #    - x is right
         #    - y is forward
         #    - z is up
-        # xyz = np.array([-pos_y, -pos_x, -pos_z])
-        # xyz = np.array([pos_y, pos_x, -pos_z])
         xyz = NED_2_ENU @ np.array([pos_x, pos_y, pos_z])
         xyz = XY_ROT_180 @ xyz
 
-        # Camera coordinates
-        #   AirSim uses
-        #    - x is left
-        #    - y is back (away from camera)
-        #    - z is up
-        #   Nerfstudio uses Blender convention
-        #    - x is right
-        #    - y is up
-        #    - z is back (away from camera)
-        #   so
-        #    nerf_x = -airsim_x
-        #    nerf_y = airsim_z
-        #    nerf_z = airsim_y
+        # Apply the same transform to the camera
         q = np.array(data['cameraFrames'][i]['rotation']['qvec'])
         rotation = quat_to_R(q)
         NED_2_ENU = np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]])
         rotation = NED_2_ENU @ rotation
         rotation = XY_ROT_180 @ rotation
-        # rotation[0,:] = -rotation[0,:]
-
-        # roll = data['cameraFrames'][i]['rotation']['x']
-        # pitch = data['cameraFrames'][i]['rotation']['y']
-        # yaw = data['cameraFrames'][i]['rotation']['z']
-        
-        # # Swap pitch and roll
-        # rotation = euler_to_R([-pitch, -roll, -yaw], seq='xyz')
-        # # rotation = euler_to_R([roll, pitch, yaw], seq='xyz')
 
         # Switch to blender convention
+        #   AirSim uses NED
+        #    - x is forward (in direction of camera)
+        #    - y is right
+        #    - z is down
+        #   Nerfstudio uses Blender convention
+        #    - x is right
+        #    - y is up
+        #    - z is back (away from camera)
+        #   so
+        #    nerf_x = airsim_y
+        #    nerf_y = -airsim_z
+        #    nerf_z = -airsim_x
         vx, vy, vz = rotation[:, 0], rotation[:, 1], rotation[:, 2]
         rotation = np.array([vy, -vz, -vx]).T
-        # rotation = np.array([-vx, vz, vy]).T
 
         translation = xyz.reshape(3, 1)
         
         c2w = np.concatenate([rotation, translation], 1)
         c2w = np.concatenate([c2w, np.array([[0, 0, 0, 1]])], 0)
-
-        # # Align camera
-        # x_axis = c2w[:3, 0]
-        # init_R = axis_angle_to_rot_mat(x_axis, np.deg2rad(90))  # Local 90 X
-        # init_R = euler_to_R([-90], seq='z') @ init_R  # Global 90 Z
-
-        # c2w[:3,:3] = init_R @ c2w[:3,:3]
 
         poses.append((c2w[:3,:3], translation.flatten()))
         trajectory.append(translation.flatten())
