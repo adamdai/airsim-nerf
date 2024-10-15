@@ -13,8 +13,8 @@ from util.plotting import pose_traces
 
 def generate_spiral(center, num_rings, radii, heights, num_points):
     """General spiral of camera poses in nerfstudio coordinates"""
-    poses = []
-    transforms = []  # camera transform matrices for nerfstudio
+    airsim_poses = []
+    nerfstudio_transforms = []  # camera transform matrices for nerfstudio
 
     for i in range(num_rings):
         r = radii[i]
@@ -29,51 +29,32 @@ def generate_spiral(center, num_rings, radii, heights, num_points):
             offset = np.array([x, y, -z])
             position = center + offset
 
-            vx = -offset
-            vx = vx / np.linalg.norm(vx)
-            d = np.linalg.norm(vx[:2])
-            unit_z = vx[2]
-            vz = np.array([-(unit_z/d)*vx[0], -(unit_z/d)*vx[1], d])
-            vy = np.cross(vz, vx)
+            vx = -offset  # ray pointing from camera to center ("Forward" vector)
+            vx = vx / np.linalg.norm(vx)  # normalize
+            d = np.linalg.norm(vx[:2])    # distance in x-y plane
+            unit_z = vx[2]                # z component of unit vector                    
+            vz = np.array([-(unit_z/d)*vx[0], -(unit_z/d)*vx[1], d])  # "Down" vector
+            vy = np.cross(vz, vx)                                     # "Right" vector
             airsim_R = np.vstack((vx, vy, vz)).T
             q = R_to_quat(airsim_R)
-            print(f"airsim R:\n{airsim_R}")
-            print(f"airsim t: {offset}")
-
-            poses.append((position, q))
+            airsim_poses.append((position, q))
 
             # Nerfstudio coordinates
-            c2w = np.eye(4)
-            ns_pos = np.array([y, x, z])  # +Z is back and away from camera (opposite look-direction)
-            vz = ns_pos / np.linalg.norm(ns_pos)  # normalize
-            d = np.linalg.norm(vz[:2])  # distance in x-y plane
-            unit_z = vz[2]              # z component of unit vector
-            vy = np.array([-(unit_z/d)*vz[0], -(unit_z/d)*vz[1], d])  # y is in x-y plane
-            vx = np.cross(vy, vz)
-            c2w[:3, :3] = np.vstack((vx, vy, vz)).T
-            c2w[:3, 3] = ns_pos
-            print(f"nerfstudio R:\n{c2w[:3, :3]}")
-            print(f"nerfstudio t: {ns_pos}")
-            # transforms.append(c2w)
-
             R = NED_2_ENU @ airsim_R
             vx, vy, vz = R[:, 0], R[:, 1], R[:, 2]
             R = np.array([vy, -vz, -vx]).T
             t = NED_2_ENU @ offset
-            print(f"transformed airsim R:\n{R}")
-            print(f"transformed airsim t: {t}")
             T = np.eye(4)
             T[:3, :3] = R
             T[:3, 3] = t
-            transforms.append(T)
+            nerfstudio_transforms.append(T)
 
-
-    return poses, transforms
+    return airsim_poses, nerfstudio_transforms
 
 
 if __name__ == '__main__':
 
-    PLOT_POSES = True
+    PLOT_POSES = False
     FOLDER_NAME = 'landscape_mtns_spiral'
 
     #%% Spiral parameters
