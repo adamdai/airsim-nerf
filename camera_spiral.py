@@ -7,7 +7,8 @@ import cv2 as cv
 import json
 import shutil
 
-from airsim_data_collection.utility.utility import quat_to_R, R_to_quat
+from util.coordinates import R_to_quat, NED_2_ENU, XY_ROT_180
+from util.plotting import pose_traces
 
 
 def generate_spiral(center, num_rings, radii, heights, num_points):
@@ -34,8 +35,10 @@ def generate_spiral(center, num_rings, radii, heights, num_points):
             unit_z = vx[2]
             vz = np.array([-(unit_z/d)*vx[0], -(unit_z/d)*vx[1], d])
             vy = np.cross(vz, vx)
-            R = np.vstack((vx, vy, vz)).T
-            q = R_to_quat(R)
+            airsim_R = np.vstack((vx, vy, vz)).T
+            q = R_to_quat(airsim_R)
+            print(f"airsim R:\n{airsim_R}")
+            print(f"airsim t: {offset}")
 
             poses.append((position, q))
 
@@ -49,50 +52,69 @@ def generate_spiral(center, num_rings, radii, heights, num_points):
             vx = np.cross(vy, vz)
             c2w[:3, :3] = np.vstack((vx, vy, vz)).T
             c2w[:3, 3] = ns_pos
-            transforms.append(c2w)
+            print(f"nerfstudio R:\n{c2w[:3, :3]}")
+            print(f"nerfstudio t: {ns_pos}")
+            # transforms.append(c2w)
+
+            R = NED_2_ENU @ airsim_R
+            vx, vy, vz = R[:, 0], R[:, 1], R[:, 2]
+            R = np.array([vy, -vz, -vx]).T
+            t = NED_2_ENU @ offset
+            print(f"transformed airsim R:\n{R}")
+            print(f"transformed airsim t: {t}")
+            T = np.eye(4)
+            T[:3, :3] = R
+            T[:3, 3] = t
+            transforms.append(T)
+
 
     return poses, transforms
 
 
 if __name__ == '__main__':
 
-    # Spiral parameters
+    PLOT_POSES = True
+    FOLDER_NAME = 'landscape_mtns_spiral'
+
+    #%% Spiral parameters
 
     # For LandscapeMountains
-    # center = np.array([99., -449., -57.])
-    # num_rings = 3
-    # radii = [250, 300, 400]
-    # heights = [150, 180, 200]
-    # num_points = [20, 20, 20]
+    center = np.array([99., -449., -57.])
+    num_rings = 3
+    radii = [250, 300, 400]
+    heights = [150, 180, 200]
+    num_points = [20, 20, 20]
 
     # For Moon
-    unreal_start = np.array([5184.151855, -182487.484375, 1295.814209])
-    unreal_goal = np.array([110060.0, -148820.0, 25740.0])
-    x = (unreal_goal - unreal_start) / (2 * 100)
+    # unreal_start = np.array([5184.151855, -182487.484375, 1295.814209])
+    # unreal_goal = np.array([110060.0, -148820.0, 25740.0])
+    # x = (unreal_goal - unreal_start) / (2 * 100)
 
-    center = np.array([x[0], x[1], 0.])
-    print("spiral center: ", center)
-    num_rings = 5
-    radii = [700, 600, 500, 400, 500]
-    heights = [150, 250, 350, 450, 600]
-    num_points = [20, 20, 20, 20, 20]
+    # center = np.array([x[0], x[1], 0.])
+    # num_rings = 5
+    # radii = [700, 600, 500, 400, 500]
+    # heights = [150, 250, 350, 450, 600]
+    # num_points = [20, 20, 20, 20, 20]
+
+    #%% Automated from here
 
     poses, transforms = generate_spiral(center, num_rings, radii, heights, num_points)
 
     # Plot the spiral
-    fig = go.Figure()
-    for position, q in poses:
-        fig.add_trace(go.Scatter3d(x=[position[0]], y=[position[1]], z=[-position[2]], mode='markers', marker=dict(size=5, color='red')))
-    fig.update_layout(scene=dict(aspectmode='data'))
-    fig.show()
+    if PLOT_POSES:
+        nerfstudio_poses = [(T[:3,:3], T[:3,3]) for T in transforms]
+        poses_plot = pose_traces(nerfstudio_poses)
+        fig = go.Figure(data=poses_plot)
+        fig.update_layout(height=900, width=1600, scene=dict(aspectmode='data'))
+        fig.show()
 
-    # Folders for saving data
-    data_folder = '../data/moon_spiral'
-    # Check if folder exists
-    if os.path.exists(data_folder):
+    # Create output folder
+    output_folder = f"output/{FOLDER_NAME}"
+    if os.path.exists(output_folder):
         print("Data folder exists, deleting...")
-        shutil.rmtree(data_folder)
-    os.makedirs(f'{data_folder}/images')
+        shutil.rmtree(output_folder)
+    os.makedirs(f'{output_folder}/images')
+
     frames = []
 
     client = airsim.VehicleClient()
@@ -106,7 +128,7 @@ if __name__ == '__main__':
         image = client.simGetImage(0, airsim.ImageType.Scene)
         image = cv.imdecode(np.frombuffer(image, np.uint8), -1)
         img_path = f'images/{i}.png'
-        cv.imwrite(f'{data_folder}/{img_path}', image)
+        cv.imwrite(f'{output_folder}/{img_path}', image)
 
         # Save camera pose
         frame = {
@@ -139,8 +161,8 @@ if __name__ == '__main__':
         
     out["frames"] = frames
 
-    print("Saving...", os.path.join(data_folder, 'transforms.json'))
-    with open(os.path.join(data_folder, 'transforms.json'), 'w', encoding="utf-8") as f: 
+    print("Saving...", os.path.join(output_folder, 'transforms.json'))
+    with open(os.path.join(output_folder, 'transforms.json'), 'w', encoding="utf-8") as f: 
         json.dump(out, f, indent=4)
 
 

@@ -9,6 +9,8 @@ import os
 import time
 import shutil
 
+from util.coordinates import quat_to_R, NED_2_ENU, XY_ROT_180
+
 FOLDER_NAME = "unreal_moon"
 DT = 0.1  # seconds
 
@@ -35,8 +37,8 @@ if __name__ == "__main__":
         try: 
             # Capture image
             responses = client.simGetImages([airsim.ImageRequest("FrontCamera", airsim.ImageType.Scene)])
-            img_path = f"{output_folder}/images/img_{img_count}.png"
-            airsim.write_file(img_path, responses[0].image_data_uint8)
+            img_path = f"images/img_{img_count}.png"
+            airsim.write_file(os.path.join(output_folder, img_path), responses[0].image_data_uint8)
 
             # Get camera pose
             cam_info = client.simGetCameraInfo("FrontCamera")
@@ -52,7 +54,15 @@ if __name__ == "__main__":
 
             # TODO: Convert to nerfstudio format
             transform = np.eye(4)
+            R = quat_to_R([qx, qy, qz, qw])
+            R = NED_2_ENU @ R
+            vx, vy, vz = R[:, 0], R[:, 1], R[:, 2]
+            R = np.array([vy, -vz, -vx]).T
 
+            t = np.array([x, y, z])
+            t = NED_2_ENU @ t
+            transform[:3, :3] = R
+            transform[:3, 3] = t
 
             # Save camera pose
             frame = {
@@ -70,7 +80,12 @@ if __name__ == "__main__":
         
 
     # TODO: pull camera params from settings.json
-    W, H = 1920, 1080
+    home_dir = os.path.expanduser("~")
+    settings_path = os.path.join(home_dir, "Documents", "AirSim", "settings.json")
+    with open(settings_path, "r") as f:
+        settings = json.load(f)
+
+    W, H = 720, 360
     FOV = 90
     fl = W / (2 * np.tan(np.radians(FOV) / 2))
     out = {

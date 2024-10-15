@@ -6,13 +6,13 @@ Usage:
 
 Params:
     camera FOV: 90 (NOTE: alternatively we can have the user add the corresponding airsim settings.json and pull camera intrinsics from there)
+    drone or car
 
     
 References:
  [1] https://docs.nerf.studio/quickstart/data_conventions.html
 
 """
-
 
 import numpy as np
 import math
@@ -21,62 +21,15 @@ import json
 import csv
 import imageio
 from scipy.spatial.transform import Rotation as R
-
 import plotly.graph_objects as go
 
-def pose_trace(pose):
-    # Unpack pose into rotation matrix R and translation vector t
-    R, t = pose
-    t = np.array(t)  # Ensure t is a numpy array
-    
-    # Define arrow colors for each axis (RGB)
-    colors = ['red', 'green', 'blue']
-    
-    # Define the unit vectors from the columns of R
-    axis_vectors = [R[:, 0], R[:, 1], R[:, 2]]
-    
-    # Create traces for each axis (X, Y, Z)
-    traces = []
-    for i, vec in enumerate(axis_vectors):
-        arrow_start = t
-        arrow_end = t + vec  # Arrow points in the direction of the column of R
-        
-        # Create an arrow trace for the axis
-        trace = go.Scatter3d(
-            x=[arrow_start[0], arrow_end[0]],
-            y=[arrow_start[1], arrow_end[1]],
-            z=[arrow_start[2], arrow_end[2]],
-            mode='lines+markers',
-            marker=dict(size=4),
-            line=dict(color=colors[i], width=5),
-            showlegend=False
-        )
-        traces.append(trace)
-    
-    return traces
+from util.plotting import pose_traces
+from util.coordinates import NED_2_ENU, XY_ROT_180
 
-def plot_poses(pose_list):
-    # Create an empty list to hold all the traces
-    all_traces = []
-    
-    # Iterate over each pose in the list and generate its trace
-    for idx, pose in enumerate(pose_list):
-        traces = pose_trace(pose)
-        all_traces.extend(traces)  # Add the individual traces to the overall list
-    
-    # Create and show the plot with all the traces
-    fig = go.Figure(data=all_traces)
-    
-    # Set the axis labels
-    # fig.update_layout(scene=dict(
-    #     xaxis_title='X',
-    #     yaxis_title='Y',
-    #     zaxis_title='Z',
-    # ))
-    fig.update_layout(scene=dict(aspectmode='data'))
-    
-    fig.show()
 
+CV_MODE = False
+PLOT_POSES = True
+SAVE_TRAJECTORY = False
 
 
 #%% Helper functions
@@ -111,8 +64,8 @@ def get_intrinsic(imgdir):
     H, W, C = imageio.imread(imgfiles[0]).shape
     vfov = 90
 
-    focal_y = H / 2  / np.tan(np.deg2rad(vfov/2))
-    focal_x = H / 2  / np.tan(np.deg2rad(vfov/2))
+    focal_y = W / 2  / np.tan(np.deg2rad(vfov/2))
+    focal_x = W / 2  / np.tan(np.deg2rad(vfov/2))
 
     return H, W, focal_x, focal_y
     
@@ -146,16 +99,28 @@ if __name__ == '__main__':
 
         for i, row in enumerate(reader):
             if i % ds_rate == 0:
-                vehicle_name = row[0]
-                timestamp = int(row[1])
-                pos_x = float(row[2])
-                pos_y = float(row[3])
-                pos_z = float(row[4])
-                q_w = float(row[5])
-                q_x = float(row[6])
-                q_y = float(row[7])
-                q_z = float(row[8])
-                image_file = row[-1]
+                if CV_MODE:
+                    timestamp = int(row[0])
+                    pos_x = float(row[1])
+                    pos_y = float(row[2])
+                    pos_z = float(row[3])
+                    q_w = float(row[4])
+                    q_x = float(row[5])
+                    q_y = float(row[6])
+                    q_z = float(row[7])
+                    image_file = row[-1]
+                else:  
+                    # Vehicle
+                    vehicle_name = row[0]
+                    timestamp = int(row[1])
+                    pos_x = float(row[2])
+                    pos_y = float(row[3])
+                    pos_z = float(row[4])
+                    q_w = float(row[5])
+                    q_x = float(row[6])
+                    q_y = float(row[7])
+                    q_z = float(row[8])
+                    image_file = row[-1]
 
                 roll, pitch, yaw = quat_to_euler([q_x, q_y, q_z, q_w])
                 
@@ -184,6 +149,7 @@ if __name__ == '__main__':
     print("Found entries...", len(data['cameraFrames']))
 
     poses = []
+    trajectory = []
 
     for i in range(len(data['cameraFrames'])):
         position = data['cameraFrames'][i]['position']
@@ -199,7 +165,10 @@ if __name__ == '__main__':
         #    - x is right
         #    - y is forward
         #    - z is up
-        xyz = np.array([pos_y, pos_x, -pos_z])
+        # xyz = np.array([-pos_y, -pos_x, -pos_z])
+        # xyz = np.array([pos_y, pos_x, -pos_z])
+        xyz = NED_2_ENU @ np.array([pos_x, pos_y, pos_z])
+        xyz = XY_ROT_180 @ xyz
 
         # Camera coordinates
         #   AirSim uses
@@ -214,24 +183,26 @@ if __name__ == '__main__':
         #    nerf_x = -airsim_x
         #    nerf_y = airsim_z
         #    nerf_z = airsim_y
-        # q = np.array(data['cameraFrames'][i]['rotation']['qvec'])
-        # airsim_rot = quat_to_R(q)
-        # vx, vy, vz = airsim_rot[:, 0], airsim_rot[:, 1], airsim_rot[:, 2]
-        # ns_rot = np.array([-vx, vz, vy]).T
-        # print(np.round(airsim_rot, 2))
+        q = np.array(data['cameraFrames'][i]['rotation']['qvec'])
+        rotation = quat_to_R(q)
+        NED_2_ENU = np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]])
+        rotation = NED_2_ENU @ rotation
+        rotation = XY_ROT_180 @ rotation
+        # rotation[0,:] = -rotation[0,:]
 
-        roll = data['cameraFrames'][i]['rotation']['x']
-        pitch = data['cameraFrames'][i]['rotation']['y']
-        yaw = data['cameraFrames'][i]['rotation']['z']
+        # roll = data['cameraFrames'][i]['rotation']['x']
+        # pitch = data['cameraFrames'][i]['rotation']['y']
+        # yaw = data['cameraFrames'][i]['rotation']['z']
         
-        # Swap pitch and roll
-        rotation = euler_to_R([pitch, roll, -yaw], seq='xyz')
+        # # Swap pitch and roll
+        # rotation = euler_to_R([-pitch, -roll, -yaw], seq='xyz')
+        # # rotation = euler_to_R([roll, pitch, yaw], seq='xyz')
 
         # Switch to blender convention
         vx, vy, vz = rotation[:, 0], rotation[:, 1], rotation[:, 2]
-        rotation = np.array([vx, vz, -vy]).T
+        rotation = np.array([vy, -vz, -vx]).T
+        # rotation = np.array([-vx, vz, vy]).T
 
-        # rotation = ns_rot
         translation = xyz.reshape(3, 1)
         
         c2w = np.concatenate([rotation, translation], 1)
@@ -245,6 +216,7 @@ if __name__ == '__main__':
         # c2w[:3,:3] = init_R @ c2w[:3,:3]
 
         poses.append((c2w[:3,:3], translation.flatten()))
+        trajectory.append(translation.flatten())
         
         if not os.path.exists(os.path.join(args.datadir, args.imgdir, data['cameraFrames'][i]['image'])):
             print("Image not found", os.path.join(args.imgdir, data['cameraFrames'][i]['image']))
@@ -280,4 +252,11 @@ if __name__ == '__main__':
     with open(os.path.join(args.datadir, 'transforms.json'), 'w', encoding="utf-8") as f: 
         json.dump(out, f, indent=4)
 
-    plot_poses(poses[:100])
+    if PLOT_POSES:
+        poses = pose_traces(poses)
+        fig = go.Figure(data=poses)
+        fig.update_layout(height=900, width=1600, scene=dict(aspectmode='data'))
+        fig.show()
+
+    if SAVE_TRAJECTORY:
+        np.savez('trajectory.npz', trajectory=trajectory)
