@@ -12,10 +12,10 @@ import shutil
 
 from util.coordinates import quat_to_R, NED_2_ENU, airsim_to_nerfstudio
 
-FOLDER_NAME = "unreal_moon_record"
+FOLDER_NAME = "landscape_mtns_spiral_record"
 DT = 0.1  # seconds
-CV_MODE = False
-STEREO = True
+CV_MODE = True
+STEREO = False
 
 def get_cam_transform(cam_info):
     cam_pose = cam_info.pose
@@ -54,11 +54,7 @@ if __name__ == "__main__":
         try: 
             # Capture image
             img_path = f"images/img_{frame_count}.png"
-            if CV_MODE:
-                image = client.simGetImage(0, airsim.ImageType.Scene)
-                image = cv.imdecode(np.frombuffer(image, np.uint8), -1)
-                cv.imwrite(f'{output_folder}/{img_path}', image)
-            elif STEREO:
+            if STEREO:
                 responses = client.simGetImages([airsim.ImageRequest("LeftCamera", airsim.ImageType.Scene),
                                                  airsim.ImageRequest("RightCamera", airsim.ImageType.Scene)])
                 left_img_path = f"images/frame_{frame_count}_left.png"
@@ -82,11 +78,18 @@ if __name__ == "__main__":
                 print(f"Saved left and right images for frame {frame_count}")
 
             else:
-                responses = client.simGetImages([airsim.ImageRequest("FrontCamera", airsim.ImageType.Scene)])
-                airsim.write_file(os.path.join(output_folder, img_path), responses[0].image_data_uint8)
+                if CV_MODE:
+                    cam_info = client.simGetCameraInfo(0)
+                    image = client.simGetImage(0, airsim.ImageType.Scene)
+                    image = cv.imdecode(np.frombuffer(image, np.uint8), -1)
+                    cv.imwrite(f'{output_folder}/{img_path}', image)
+                else:
+                    cam_info = client.simGetCameraInfo("FrontCamera")
+                    responses = client.simGetImages([airsim.ImageRequest("FrontCamera", airsim.ImageType.Scene)])
+                    airsim.write_file(os.path.join(output_folder, img_path), responses[0].image_data_uint8)
 
                 # Get camera pose
-                cam_info = client.simGetCameraInfo("FrontCamera")
+                
                 cam_pose = cam_info.pose
                 position = cam_pose.position
                 x, y, z = position.x_val, position.y_val, position.z_val
@@ -132,7 +135,10 @@ if __name__ == "__main__":
         settings = json.load(f)
 
     # TODO: handle CVMODE and STEREO cases
-    capture_settings = settings["Vehicles"]["Rover"]["Cameras"]["FrontCamera"]["CaptureSettings"][0]
+    if CV_MODE:
+        capture_settings = settings["CameraDefaults"]["CaptureSettings"][0]
+    else:
+        capture_settings = settings["Vehicles"]["Rover"]["Cameras"]["FrontCamera"]["CaptureSettings"][0]
     W = capture_settings["Width"]
     H = capture_settings["Height"]
     FOV = capture_settings["FOV_Degrees"]

@@ -171,7 +171,6 @@ if __name__ == '__main__':
         # Apply the same transform to the camera
         q = np.array(data['cameraFrames'][i]['rotation']['qvec'])
         rotation = quat_to_R(q)
-        NED_2_ENU = np.array([[0, 1, 0], [1, 0, 0], [0, 0, -1]])
         rotation = NED_2_ENU @ rotation
         rotation = XY_ROT_180 @ rotation
 
